@@ -186,11 +186,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div class="steps" id="steps-novo">
     <div class="step active" id="step-ind-1"><span class="step-num">1</span>Fazenda</div>
     <div class="step-line"></div>
-    <div class="step" id="step-ind-2"><span class="step-num">2</span>Ponto</div>
+    <div class="step" id="step-ind-2"><span class="step-num">2</span>Chuva</div>
     <div class="step-line"></div>
-    <div class="step" id="step-ind-3"><span class="step-num">3</span>Chuva</div>
-    <div class="step-line"></div>
-    <div class="step" id="step-ind-4"><span class="step-num">4</span>Confirmar</div>
+    <div class="step" id="step-ind-3"><span class="step-num">3</span>Confirmar</div>
   </div>
 
   <div class="page active" id="page-1">
@@ -205,51 +203,38 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
   <div class="page" id="page-2">
     <div class="card">
-      <label class="field-label">Ponto de coleta (pluviômetro)<span class="req">*</span></label>
-      <div class="options" id="opts-ponto"></div>
-    </div>
-    <div class="btn-wrap">
-      <button class="btn btn-back" onclick="irPagina(1)">Voltar</button>
-      <button class="btn btn-next" id="btn-p2" disabled onclick="irPagina(3)">Avançar</button>
-    </div>
-  </div>
-
-  <div class="page" id="page-3">
-    <div class="card">
       <label class="field-label">Data<span class="req">*</span></label>
       <input class="inp" type="date" id="data">
     </div>
     <div class="card">
-      <label class="field-label">mm de chuva coletados<span class="req">*</span></label>
-      <div class="mm-input-wrap">
-        <input type="number" id="mm" step="0.1" min="0" placeholder="0" oninput="form.mm=this.value">
-        <span class="mm-unit">mm</span>
-      </div>
+      <label class="field-label">mm de chuva por ponto de coleta<span class="req">*</span></label>
+      <p style="font-size:11px;color:var(--tx3);margin-bottom:12px">Preencha só os pontos que tiveram chuva. Pode deixar em branco os que não mediram nada.</p>
+      <div id="lote-pontos"></div>
     </div>
     <div class="card">
       <label class="field-label">Observação</label>
-      <input class="inp" type="text" id="obs" placeholder="Opcional">
+      <input class="inp" type="text" id="obs" placeholder="Opcional — vale para todos os pontos preenchidos">
     </div>
     <div class="btn-wrap">
-      <button class="btn btn-back" onclick="irPagina(2)">Voltar</button>
-      <button class="btn btn-next" onclick="irPagina(4)">Avançar</button>
+      <button class="btn btn-back" onclick="irPagina(1)">Voltar</button>
+      <button class="btn btn-next" onclick="avancarParaConfirmacao()">Avançar</button>
     </div>
   </div>
 
-  <div class="page" id="page-4">
+  <div class="page" id="page-3">
     <div class="card" id="resumo-card"></div>
     <div class="btn-wrap">
-      <button class="btn btn-back" onclick="irPagina(3)">Voltar</button>
-      <button class="btn btn-submit" onclick="salvarRegistro()">💾 Salvar registro</button>
+      <button class="btn btn-back" onclick="irPagina(2)">Voltar</button>
+      <button class="btn btn-submit" onclick="salvarRegistrosLote()">💾 Salvar registros</button>
     </div>
   </div>
 
   <div class="page" id="page-sucesso">
     <div class="success">
       <div class="success-icon">✅</div>
-      <h2>Registro salvo!</h2>
-      <p>A medição de chuva foi registrada com sucesso.</p>
-      <button class="btn-novo" onclick="novoRegistro()">Novo registro</button>
+      <h2 id="sucesso-titulo">Registros salvos!</h2>
+      <p>As medições de chuva foram registradas com sucesso.</p>
+      <button class="btn-novo" onclick="novoRegistro()">Novo lançamento</button>
     </div>
   </div>
 </div>
@@ -276,7 +261,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div class="painel-wrapper">
     <div class="filter-row-painel">
       <select class="filter-select" id="painel-fazenda" onchange="iniciarPainelMain()"></select>
-      <select class="filter-select" id="painel-safra" onchange="iniciarPainelMain()"></select>
     </div>
 
     <div id="print-area">
@@ -360,7 +344,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 // ══════════ DADOS ══════════
 const LISTAS_PADRAO = {
   fazendas: ['São José 1','São José 2','Minuano'],
-  safras: ['25/26','26/27','27/28'],
 };
 const LISTAS_VERSAO = 'v1-2026';
 let LISTAS = JSON.parse(localStorage.getItem('chuva_listas')||'null') || JSON.parse(JSON.stringify(LISTAS_PADRAO));
@@ -394,7 +377,8 @@ window.LISTAS = LISTAS;
 window.PONTOS = PONTOS;
 
 // ══════════ ESTADO ══════════
-const form = {fazenda:'',ponto:'',data:'',mm:'',obs:''};
+// form.valores guarda { nomeDoPonto: "12.5" } enquanto o usuário digita
+const form = {fazenda:'',data:'',obs:'',valores:{}};
 
 document.getElementById('data').value = new Date().toISOString().split('T')[0];
 form.data = document.getElementById('data').value;
@@ -411,41 +395,72 @@ function selFazenda(el, valor){
   document.querySelectorAll('#opts-fazenda .opt').forEach(o=>o.classList.remove('selected'));
   el.classList.add('selected');
   form.fazenda = valor;
-  form.ponto = '';
+  form.valores = {};
   document.getElementById('btn-p1').disabled = false;
-  renderOpcoesPonto();
 }
-function renderOpcoesPonto(){
+function renderLoteDaFazenda(){
   const lista = PONTOS[form.fazenda] || [];
-  document.getElementById('opts-ponto').innerHTML = lista.length ? lista.map(p=>
-    `<label class="opt" onclick="selPonto(this,'${p}')"><input type="radio" name="ponto"><div class="opt-circle"></div><span class="opt-label">${p}</span></label>`
-  ).join('') : `<p style="font-size:12px;color:var(--tx3)">Nenhum ponto cadastrado para esta fazenda. Vá em Config para adicionar.</p>`;
-  document.getElementById('btn-p2').disabled = true;
+  window._lotePontosAtuais = lista;
+  const container = document.getElementById('lote-pontos');
+  if(!lista.length){
+    container.innerHTML = `<p style="font-size:12px;color:var(--tx3)">Nenhum ponto cadastrado para esta fazenda. Vá em Config para adicionar os pontos de coleta antes de lançar.</p>`;
+    return;
+  }
+  container.innerHTML = lista.map((p,i)=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--bd)">
+      <span id="lote-lbl-${i}" style="font-size:13px;font-weight:500"></span>
+      <div class="mm-input-wrap" style="gap:6px">
+        <input type="number" id="lote-mm-${i}" step="0.1" min="0" placeholder="0" style="width:80px;font-size:20px" class="lote-input" data-idx="${i}">
+        <span class="mm-unit">mm</span>
+      </div>
+    </div>
+  `).join('');
+  // Preenche o nome do ponto e o valor já digitado (se o usuário voltou uma etapa) de forma segura,
+  // sem depender de montar texto do usuário dentro de HTML/JS — evita quebra com aspas ou símbolos no nome.
+  lista.forEach((p,i)=>{
+    document.getElementById('lote-lbl-'+i).textContent = p;
+    const input = document.getElementById('lote-mm-'+i);
+    if(form.valores[p]!==undefined) input.value = form.valores[p];
+  });
 }
-function selPonto(el, valor){
-  document.querySelectorAll('#opts-ponto .opt').forEach(o=>o.classList.remove('selected'));
-  el.classList.add('selected');
-  form.ponto = valor;
-  document.getElementById('btn-p2').disabled = false;
+function sincronizarLoteInputs(){
+  const lista = window._lotePontosAtuais || [];
+  lista.forEach((p,i)=>{
+    const input = document.getElementById('lote-mm-'+i);
+    if(!input) return;
+    if(input.value!=='') form.valores[p] = input.value;
+    else delete form.valores[p];
+  });
+}
+function avancarParaConfirmacao(){
+  sincronizarLoteInputs();
+  irPagina(3);
 }
 
 function irPagina(n){
+  if(n===2) renderLoteDaFazenda();
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+n).classList.add('active');
-  [1,2,3,4].forEach(i=>{
+  [1,2,3].forEach(i=>{
     const el = document.getElementById('step-ind-'+i);
     if(!el) return;
     el.classList.toggle('active', i===n);
     el.classList.toggle('done', i<n);
   });
-  if(n===4) renderResumo();
+  if(n===3) renderResumo();
+}
+function entradasPreenchidas(){
+  return Object.entries(form.valores).filter(([p,v])=> v!=='' && v!==null && v!==undefined && !isNaN(parseFloat(v)));
 }
 function renderResumo(){
+  const entradas = entradasPreenchidas();
+  const linhas = entradas.length ? entradas.map(([p,v])=>
+    `<div class="resumo-item"><span class="resumo-label">${p}</span><span class="resumo-val">${parseFloat(v)} mm</span></div>`
+  ).join('') : `<p style="font-size:12px;color:var(--tx3)">Nenhum ponto preenchido ainda — volte e digite ao menos um valor.</p>`;
   document.getElementById('resumo-card').innerHTML = `
     <div class="resumo-item"><span class="resumo-label">Fazenda</span><span class="resumo-val">${form.fazenda}</span></div>
-    <div class="resumo-item"><span class="resumo-label">Ponto de coleta</span><span class="resumo-val">${form.ponto}</span></div>
     <div class="resumo-item"><span class="resumo-label">Data</span><span class="resumo-val">${formatarData(form.data)}</span></div>
-    <div class="resumo-item"><span class="resumo-label">Chuva</span><span class="resumo-val">${form.mm||0} mm</span></div>
+    ${linhas}
     <div class="resumo-item"><span class="resumo-label">Observação</span><span class="resumo-val">${form.obs||'—'}</span></div>
   `;
 }
@@ -455,30 +470,33 @@ function formatarData(iso){
   return `${d}/${m}/${y}`;
 }
 
-function salvarRegistro(){
-  const reg = {
-    id: 'r'+Date.now()+Math.random().toString(36).slice(2,8),
-    data: form.data, fazenda: form.fazenda, ponto: form.ponto,
-    mm: parseFloat(form.mm)||0, obs: form.obs||'',
-    ts: Date.now()
-  };
+function salvarRegistrosLote(){
+  const entradas = entradasPreenchidas();
+  if(!entradas.length){ alert('Preencha pelo menos um ponto de coleta com a quantidade de chuva.'); return; }
   const hist = JSON.parse(localStorage.getItem('chuva_hist')||'[]');
-  hist.push(reg);
+  const novos = entradas.map(([ponto,v])=>({
+    id: 'r'+Date.now()+Math.random().toString(36).slice(2,8),
+    data: form.data, fazenda: form.fazenda, ponto: ponto,
+    mm: parseFloat(v)||0, obs: form.obs||'',
+    ts: Date.now()
+  }));
+  novos.forEach(reg=>{
+    hist.push(reg);
+    if(typeof window.enviarParaFirebase==='function') window.enviarParaFirebase(reg);
+  });
   localStorage.setItem('chuva_hist', JSON.stringify(hist));
-  if(typeof window.enviarParaFirebase==='function') window.enviarParaFirebase(reg);
+  document.getElementById('sucesso-titulo').textContent = novos.length===1 ? 'Registro salvo!' : `${novos.length} registros salvos!`;
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-sucesso').classList.add('active');
   document.getElementById('steps-novo').style.display='none';
 }
 function novoRegistro(){
-  form.fazenda=''; form.ponto=''; form.mm=''; form.obs='';
-  document.getElementById('mm').value='';
+  form.fazenda=''; form.valores={}; form.obs='';
   document.getElementById('obs').value='';
   document.getElementById('data').value = new Date().toISOString().split('T')[0];
   form.data = document.getElementById('data').value;
-  document.querySelectorAll('#opts-fazenda .opt, #opts-ponto .opt').forEach(o=>o.classList.remove('selected'));
+  document.querySelectorAll('#opts-fazenda .opt').forEach(o=>o.classList.remove('selected'));
   document.getElementById('btn-p1').disabled = true;
-  document.getElementById('btn-p2').disabled = true;
   document.getElementById('steps-novo').style.display='flex';
   irPagina(1);
 }
@@ -517,10 +535,6 @@ function renderFiltrosFazenda(){
     el.innerHTML = '<option value="">Todas as fazendas</option>'+opts;
     if([...el.options].some(o=>o.value===atual)) el.value = atual;
   });
-  const safraSel = document.getElementById('painel-safra');
-  const atualS = safraSel.value;
-  safraSel.innerHTML = '<option value="">Todas as safras</option>'+LISTAS.safras.map(s=>`<option>${s}</option>`).join('');
-  if([...safraSel.options].some(o=>o.value===atualS)) safraSel.value = atualS;
 }
 function iniciarHistoricoMain(){
   renderFiltrosFazenda();
@@ -610,16 +624,7 @@ function iniciarPainelMain(){
   renderFiltrosFazenda();
   const hist = JSON.parse(localStorage.getItem('chuva_hist')||'[]');
   const filFaz = document.getElementById('painel-fazenda').value;
-  const filSafra = document.getElementById('painel-safra').value;
   let filtrado = hist.filter(r=> !filFaz || r.fazenda===filFaz);
-  if(filSafra){
-    const [a1,a2] = filSafra.split('/').map(s=>2000+parseInt(s));
-    filtrado = filtrado.filter(r=>{
-      const d = new Date(r.data);
-      const ano = d.getFullYear(), mes = d.getMonth()+1;
-      if(mes>=7) return ano===a1; else return ano===a2;
-    });
-  }
   const hoje = new Date().toISOString().slice(0,10);
   const mesAtual = new Date().toISOString().slice(0,7);
   const mmHoje = filtrado.filter(r=>r.data===hoje).reduce((s,r)=>s+r.mm,0);
@@ -631,7 +636,7 @@ function iniciarPainelMain(){
   document.getElementById('painel-stats').innerHTML = `
     <div class="stat-card"><div class="lbl">Chuva hoje</div><div class="val azul">${mmHoje.toFixed(1)} mm</div></div>
     <div class="stat-card"><div class="lbl">Chuva no mês</div><div class="val azul">${mmMes.toFixed(1)} mm</div></div>
-    <div class="stat-card"><div class="lbl">Acumulado safra</div><div class="val">${mmAcum.toFixed(1)} mm</div></div>
+    <div class="stat-card"><div class="lbl">Acumulado total</div><div class="val">${mmAcum.toFixed(1)} mm</div></div>
     <div class="stat-card"><div class="lbl">Média por dia c/ chuva</div><div class="val">${media} mm</div></div>
   `;
 
@@ -755,14 +760,14 @@ function cfgAdicionarPonto(){
   salvarPontos();
   document.getElementById('cfg-novo-ponto').value='';
   cfgRenderPontos();
-  if(form.fazenda===faz) renderOpcoesPonto();
+  if(form.fazenda===faz && document.getElementById('page-2').classList.contains('active')) renderLoteDaFazenda();
 }
 function cfgRemoverPonto(faz, p){
   if(!confirm(`Remover o ponto "${p}"?`)) return;
   PONTOS[faz] = (PONTOS[faz]||[]).filter(x=>x!==p);
   salvarPontos();
   cfgRenderPontos();
-  if(form.fazenda===faz) renderOpcoesPonto();
+  if(form.fazenda===faz && document.getElementById('page-2').classList.contains('active')) renderLoteDaFazenda();
 }
 
 // ══════════ SINCRONIZAÇÃO: atualizar tela ao receber dados remotos ══════════
